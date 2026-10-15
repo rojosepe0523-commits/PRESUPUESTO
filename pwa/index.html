@@ -1,0 +1,417 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#1f4e79">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Presupuesto">
+  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+  <link rel="icon" type="image/png" href="icons/icon-192.png">
+  <link rel="manifest" href="manifest.webmanifest">
+  <title>Mi Presupuesto</title>
+  <style>
+    :root { --azul:#1f4e79; --verde:#2e7d32; --rojo:#c62828; --ambar:#f9a825; --gris:#f2f4f7; --texto:#1c1c1e; }
+    * { box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+    html { background:var(--gris); }
+    body { margin:0; font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif; background:var(--gris); color:var(--texto);
+           padding:calc(env(safe-area-inset-top) + 12px) 16px calc(env(safe-area-inset-bottom) + 40px); }
+    header { display:flex; align-items:center; justify-content:space-between; margin:4px 0 12px; }
+    h1 { font-size:22px; margin:0; }
+    .estado { font-size:13px; padding:5px 10px; border-radius:14px; background:#e3e8ef; color:#444; white-space:nowrap; }
+    .estado.ok { background:#e6f4ea; color:var(--verde); }
+    .estado.pend { background:#fff4d6; color:#8a6100; }
+    .estado.off { background:#fde7e7; color:var(--rojo); }
+    .icono { border:none; background:none; font-size:22px; padding:4px 0 4px 10px; }
+    .card { background:#fff; border-radius:14px; padding:16px; margin-bottom:14px; box-shadow:0 1px 3px rgba(0,0,0,.08); }
+    .resumen { background:var(--azul); color:#fff; }
+    .resumen .mes { text-transform:capitalize; opacity:.85; font-size:14px; }
+    .resumen .total { font-size:32px; font-weight:700; margin:4px 0; }
+    .barra { height:8px; background:rgba(0,0,0,.12); border-radius:4px; overflow:hidden; }
+    .resumen .barra { background:rgba(255,255,255,.25); }
+    .barra > div { height:100%; background:var(--verde); }
+    .barra > div.alto { background:var(--ambar); } .barra > div.excedido { background:var(--rojo); }
+    label { display:block; font-size:13px; color:#666; margin:12px 0 4px; }
+    input, select { width:100%; font-size:17px; padding:12px; border:1px solid #d0d5dd; border-radius:10px;
+           background:#fff; color:var(--texto); -webkit-appearance:none; appearance:none; height:50px; }
+    select { padding-right:36px;
+           background:#fff url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8'%3E%3Cpath d='M1 1l5 5 5-5' fill='none' stroke='%23666' stroke-width='2'/%3E%3C/svg%3E") no-repeat right 12px center; }
+    input.monto { font-size:28px; font-weight:600; text-align:center; height:60px; }
+    .chips { display:flex; flex-wrap:wrap; gap:8px; }
+    .chip { padding:8px 12px; border-radius:20px; border:1px solid #d0d5dd; background:#fff; font-size:15px; color:var(--texto); }
+    .chip.sel { background:var(--azul); color:#fff; border-color:var(--azul); }
+    .fila2 { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+    .boton { width:100%; margin-top:16px; padding:16px; font-size:18px; font-weight:600; border:none; border-radius:12px; background:var(--verde); color:#fff; }
+    .boton.sec { background:#e3e8ef; color:var(--texto); font-size:16px; padding:12px; margin-top:10px; }
+    .boton:disabled { opacity:.5; }
+    .cat { margin:10px 0; font-size:14px; }
+    .cat .top { display:flex; justify-content:space-between; margin-bottom:4px; gap:8px; }
+    .item { display:flex; justify-content:space-between; align-items:center; padding:10px 0; border-bottom:1px solid #eee; font-size:15px; gap:8px; }
+    .item:last-child { border-bottom:none; }
+    .item small { color:#888; display:block; }
+    .item .der { white-space:nowrap; }
+    .item .borrar { border:none; background:none; color:var(--rojo); font-size:18px; padding:4px 8px; }
+    .toast { position:fixed; left:50%; bottom:calc(env(safe-area-inset-bottom) + 24px); transform:translateX(-50%); background:#333; color:#fff;
+           padding:12px 20px; border-radius:20px; font-size:15px; opacity:0; transition:opacity .3s; pointer-events:none; max-width:90%; text-align:center; }
+    .toast.ver { opacity:1; }
+    .tabs { display:flex; gap:8px; margin-bottom:14px; }
+    .tabs button { flex:1; padding:10px; border-radius:10px; border:none; background:#fff; font-size:15px; color:var(--texto); }
+    .tabs button.act { background:var(--azul); color:#fff; }
+    .oculto { display:none !important; }
+    .vacio { text-align:center; color:#888; padding:30px 0; }
+    .ayuda { font-size:13px; color:#666; line-height:1.4; }
+    .aviso { background:#fff4d6; color:#6b4b00; font-size:14px; padding:10px 12px; border-radius:10px; margin-top:12px; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>💰 Presupuesto</h1>
+    <div><span class="estado" id="estado">…</span><button class="icono" id="btnAjustes" aria-label="Ajustes">⚙️</button></div>
+  </header>
+
+  <!-- Ajustes de conexión -->
+  <div id="ajustes" class="card oculto">
+    <b>Conexión con tu hoja de Google</b>
+    <p class="ayuda">Pega la URL de tu implementación de Apps Script (termina en <b>/exec</b>) y tu clave secreta (función <b>mostrarClave</b>).</p>
+    <label>URL de Apps Script</label>
+    <input id="cfgUrl" type="url" placeholder="https://script.google.com/macros/s/…/exec" autocomplete="off" autocapitalize="off" spellcheck="false">
+    <label>Clave secreta</label>
+    <input id="cfgClave" type="text" placeholder="Clave" autocomplete="off" autocapitalize="off" spellcheck="false">
+    <button class="boton" id="btnProbar">Guardar y probar</button>
+    <button class="boton sec" id="btnCerrarAjustes">Cerrar</button>
+    <div class="aviso oculto" id="avisoAjustes"></div>
+  </div>
+
+  <div id="principal">
+    <div class="card resumen">
+      <div class="mes" id="mes"></div>
+      <div class="total" id="total">$0.00</div>
+      <div style="font-size:14px;margin-bottom:8px" id="disp"></div>
+      <div class="barra"><div id="barraTotal" style="width:0"></div></div>
+    </div>
+
+    <div class="tabs">
+      <button class="act" data-tab="registrar">Registrar</button>
+      <button data-tab="categorias">Categorías</button>
+      <button data-tab="historial">Historial</button>
+    </div>
+
+    <div id="registrar" class="card">
+      <label>Monto</label>
+      <input id="monto" class="monto" type="text" inputmode="decimal" placeholder="0.00" autocomplete="off">
+      <label>Descripción</label>
+      <input id="descripcion" type="text" placeholder="¿Qué compraste?" autocomplete="off">
+      <label>Categoría</label>
+      <div class="chips" id="chips"></div>
+      <div class="fila2">
+        <div><label>Fecha</label><input id="fecha" type="date"></div>
+        <div><label>Pago</label>
+          <select id="metodo">
+            <option>Efectivo</option>
+            <option>Débito</option>
+            <option>Crédito</option>
+            <option>Transferencia</option>
+          </select>
+        </div>
+      </div>
+      <label>Notas (opcional)</label>
+      <input id="notas" type="text" autocomplete="off">
+      <button class="boton" id="btnGuardar">Guardar gasto</button>
+    </div>
+
+    <div id="categorias" class="card oculto"></div>
+    <div id="historial" class="card oculto"></div>
+  </div>
+
+  <div class="toast" id="toast"></div>
+
+  <script>
+    'use strict';
+    const CATS_DEFAULT = ['Comida', 'Supermercado', 'Transporte', 'Casa', 'Servicios', 'Salud', 'Entretenimiento', 'Ropa', 'Educación', 'Otros'];
+    const LS_CONFIG = 'presupuesto.config', LS_CACHE = 'presupuesto.cache', LS_COLA = 'presupuesto.cola';
+
+    const $ = id => document.getElementById(id);
+    const dinero = n => '$' + Number(n).toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+    const hoyISO = () => { const d = new Date(); d.setMinutes(d.getMinutes() - d.getTimezoneOffset()); return d.toISOString().slice(0, 10); };
+    const mesActual = () => hoyISO().slice(0, 7);
+    const clase = p => p > 1 ? 'excedido' : p > .8 ? 'alto' : '';
+    const isoAFecha = s => { const p = String(s).split('-'); return p.length === 3 ? p[2] + '/' + p[1] + '/' + p[0] : s; };
+    const nuevoId = () => (self.crypto && crypto.randomUUID) ? crypto.randomUUID()
+      : Date.now().toString(36) + '-' + Math.random().toString(36).slice(2) + Math.random().toString(36).slice(2);
+
+    function leerLS(k) { try { return JSON.parse(localStorage.getItem(k)); } catch (e) { return null; } }
+    function escribirLS(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) { /* almacenamiento lleno o bloqueado */ } }
+
+    let config = leerLS(LS_CONFIG);
+    let cache = leerLS(LS_CACHE);
+    let pendientes = [];
+    let categoriaSel = '';
+    let sincronizando = false;
+    let conectado = null;     // null = sin intentar, true/false = resultado del último intento
+    let ultimaSync = null;
+    let vista = [];           // recientes que se muestran en Historial
+
+    /* ---------- Cola de pendientes (IndexedDB, con respaldo en localStorage) ---------- */
+    const cola = (() => {
+      let dbProm = null;
+      const abrir = () => dbProm || (dbProm = new Promise((res, rej) => {
+        const r = indexedDB.open('presupuesto', 1);
+        r.onupgradeneeded = () => r.result.createObjectStore('pendientes', { keyPath: 'id' });
+        r.onsuccess = () => res(r.result);
+        r.onerror = () => rej(r.error);
+      }));
+      const op = (modo, fn) => abrir().then(db => new Promise((res, rej) => {
+        const t = db.transaction('pendientes', modo);
+        const req = fn(t.objectStore('pendientes'));
+        t.oncomplete = () => res(req && req.result);
+        t.onerror = t.onabort = () => rej(t.error);
+      }));
+      const ls = {
+        todos: async () => leerLS(LS_COLA) || [],
+        guardar: async g => { const l = (leerLS(LS_COLA) || []).filter(x => x.id !== g.id); l.push(g); escribirLS(LS_COLA, l); },
+        borrar: async ids => escribirLS(LS_COLA, (leerLS(LS_COLA) || []).filter(x => ids.indexOf(x.id) < 0))
+      };
+      const idb = {
+        todos: () => op('readonly', s => s.getAll()),
+        guardar: g => op('readwrite', s => s.put(g)),
+        borrar: ids => op('readwrite', s => { ids.forEach(id => s.delete(id)); })
+      };
+      let usar = ('indexedDB' in self) ? idb : ls;
+      const conRespaldo = nombre => async (...a) => {
+        try { return await usar[nombre](...a); } catch (e) { usar = ls; return ls[nombre](...a); }
+      };
+      return { todos: conRespaldo('todos'), guardar: conRespaldo('guardar'), borrar: conRespaldo('borrar') };
+    })();
+
+    /* ---------- Comunicación con Apps Script ---------- */
+    async function api(accion, extra) {
+      if (!config) throw new Error('Falta configurar la conexión');
+      const ctrl = new AbortController();
+      const t = setTimeout(() => ctrl.abort(), 25000);
+      try {
+        const r = await fetch(config.url, {
+          method: 'POST',
+          headers: { 'Content-Type': 'text/plain;charset=utf-8' }, // evita la verificación CORS previa
+          body: JSON.stringify(Object.assign({ accion: accion, clave: config.clave }, extra)),
+          redirect: 'follow',
+          signal: ctrl.signal
+        });
+        let j;
+        try { j = await r.json(); } catch (e) {
+          const err = new Error('La URL no respondió como la API. Revisa que sea la de la implementación y que el acceso sea "Cualquier usuario".');
+          err.servidor = true; throw err;
+        }
+        if (!j.ok) { const err = new Error(j.error || 'Error del servidor'); err.servidor = true; throw err; }
+        return j;
+      } finally { clearTimeout(t); }
+    }
+
+    async function sincronizar() {
+      if (sincronizando || !config) return;
+      sincronizando = true; pintarEstado();
+      let otraVez = false;
+      try {
+        pendientes = await cola.todos();
+        let j;
+        if (pendientes.length) {
+          const lote = pendientes.slice(0, 50);
+          j = await api('agregar', { gastos: lote });
+          const rechazados = j.rechazados || [];
+          const listos = (j.ids || []).concat(rechazados.map(r => r.id));
+          await cola.borrar(listos);
+          if (rechazados.length) toast('⚠️ ' + rechazados.length + ' gasto(s) rechazado(s): ' + rechazados[0].motivo);
+          pendientes = await cola.todos();
+          otraVez = pendientes.length > 0 && listos.length > 0;
+        } else {
+          j = await api('datos');
+        }
+        cache = j.datos; escribirLS(LS_CACHE, cache);
+        conectado = true; ultimaSync = new Date();
+      } catch (e) {
+        conectado = false;
+        if (e.servidor) toast('⚠️ ' + e.message);
+      } finally {
+        sincronizando = false;
+        pintar();
+        if (otraVez) sincronizar();
+      }
+    }
+
+    /* ---------- Pantalla ---------- */
+    function datosVista() {
+      const base = cache || { mes: new Date().toLocaleDateString('es-MX', { month: 'long', year: 'numeric' }), mesClave: mesActual(),
+        totalMes: 0, presupuestoTotal: 0, recientes: [], metodos: [],
+        categorias: CATS_DEFAULT.map(n => ({ nombre: n, presupuesto: 0, gastado: 0 })) };
+      const mismoMes = base.mesClave === mesActual();
+      const cats = base.categorias.map(c => ({ nombre: c.nombre, presupuesto: c.presupuesto, gastado: mismoMes ? c.gastado : 0 }));
+      let total = mismoMes ? base.totalMes : 0;
+      pendientes.forEach(g => {
+        if (String(g.fecha).slice(0, 7) !== mesActual()) return;
+        total += Number(g.monto);
+        const c = cats.find(x => x.nombre === g.categoria);
+        if (c) c.gastado += Number(g.monto);
+      });
+      const pend = pendientes.slice().sort((a, b) => String(b.creado).localeCompare(String(a.creado)))
+        .map(g => ({ id: g.id, fecha: isoAFecha(g.fecha), descripcion: g.descripcion, categoria: g.categoria, monto: Number(g.monto), metodo: g.metodo, pendiente: true }));
+      return {
+        mes: mismoMes ? base.mes : new Date().toLocaleDateString('es-MX', { month: 'long', year: 'numeric' }),
+        total: total, presupuestoTotal: base.presupuestoTotal, categorias: cats, metodos: base.metodos,
+        recientes: pend.concat(base.recientes || []).slice(0, 30)
+      };
+    }
+
+    function pintarEstado() {
+      const e = $('estado');
+      let txt, cls;
+      if (!config) { txt = 'Sin configurar'; cls = 'off'; }
+      else if (sincronizando) { txt = '⟳ Sincronizando'; cls = ''; }
+      else if (pendientes.length) { txt = '🕓 ' + pendientes.length + ' pendiente' + (pendientes.length > 1 ? 's' : ''); cls = 'pend'; }
+      else if (conectado === false || !navigator.onLine) { txt = 'Sin conexión'; cls = 'off'; }
+      else if (conectado) { txt = '✓ Al día'; cls = 'ok'; }
+      else { txt = '…'; cls = ''; }
+      e.textContent = txt; e.className = 'estado ' + cls;
+      e.title = ultimaSync ? 'Última sincronización: ' + ultimaSync.toLocaleTimeString('es-MX') : '';
+    }
+
+    function pintar() {
+      const d = datosVista();
+      $('mes').textContent = d.mes;
+      $('total').textContent = dinero(d.total);
+      const resto = d.presupuestoTotal - d.total;
+      $('disp').textContent = d.presupuestoTotal
+        ? (resto >= 0 ? 'Disponible: ' : 'Excedido: ') + dinero(Math.abs(resto)) + ' de ' + dinero(d.presupuestoTotal)
+        : (cache ? 'Sin presupuesto definido' : 'Conéctate una vez para cargar tu presupuesto');
+      const p = d.presupuestoTotal ? d.total / d.presupuestoTotal : 0;
+      $('barraTotal').style.width = Math.min(p * 100, 100) + '%';
+      $('barraTotal').className = clase(p);
+
+      if (d.metodos && d.metodos.length) {
+        const actual = $('metodo').value;
+        const nuevo = d.metodos.map(m => '<option>' + esc(m) + '</option>').join('');
+        if ($('metodo').innerHTML !== nuevo) { $('metodo').innerHTML = nuevo; if (d.metodos.indexOf(actual) >= 0) $('metodo').value = actual; }
+      }
+
+      $('chips').innerHTML = d.categorias.map(c =>
+        '<button type="button" class="chip' + (c.nombre === categoriaSel ? ' sel' : '') + '" data-cat="' + esc(c.nombre) + '">' + esc(c.nombre) + '</button>').join('');
+
+      $('categorias').innerHTML = d.categorias.map(c => {
+        const pc = c.presupuesto ? c.gastado / c.presupuesto : 0;
+        return '<div class="cat"><div class="top"><span>' + esc(c.nombre) + '</span><span>' + dinero(c.gastado) + ' / ' + dinero(c.presupuesto) + '</span></div>' +
+               '<div class="barra"><div class="' + clase(pc) + '" style="width:' + Math.min(pc * 100, 100) + '%"></div></div></div>';
+      }).join('');
+
+      vista = d.recientes;
+      $('historial').innerHTML = vista.length ? vista.map((r, i) =>
+        '<div class="item"><div><b>' + (r.pendiente ? '🕓 ' : '') + esc(r.descripcion || r.categoria) + '</b><small>' + esc(r.fecha) + ' · ' + esc(r.categoria) + ' · ' + esc(r.metodo) +
+        (r.pendiente ? ' · sin sincronizar' : '') + '</small></div>' +
+        '<div class="der">' + dinero(r.monto) + (r.id ? '<button class="borrar" data-i="' + i + '" aria-label="Eliminar">✕</button>' : '') + '</div></div>').join('')
+        : '<div class="vacio">Aún no hay gastos</div>';
+
+      pintarEstado();
+    }
+
+    let toastT;
+    function toast(msg) { const t = $('toast'); t.textContent = msg; t.classList.add('ver'); clearTimeout(toastT); toastT = setTimeout(() => t.classList.remove('ver'), 2600); }
+
+    function mostrarAjustes(ver) {
+      $('ajustes').classList.toggle('oculto', !ver);
+      $('principal').classList.toggle('oculto', ver);
+      $('btnCerrarAjustes').classList.toggle('oculto', !config);
+      $('avisoAjustes').classList.add('oculto');
+      if (ver && config) { $('cfgUrl').value = config.url; $('cfgClave').value = config.clave; }
+    }
+
+    /* ---------- Eventos ---------- */
+    $('chips').addEventListener('click', e => {
+      const b = e.target.closest('.chip'); if (!b) return;
+      categoriaSel = b.dataset.cat;
+      document.querySelectorAll('.chip').forEach(x => x.classList.toggle('sel', x === b));
+    });
+
+    document.querySelector('.tabs').addEventListener('click', e => {
+      const b = e.target.closest('button'); if (!b) return;
+      document.querySelectorAll('.tabs button').forEach(x => x.classList.toggle('act', x === b));
+      ['registrar', 'categorias', 'historial'].forEach(t => $(t).classList.toggle('oculto', t !== b.dataset.tab));
+    });
+
+    $('btnGuardar').addEventListener('click', async () => {
+      const monto = parseFloat($('monto').value.replace(',', '.'));
+      if (!(monto > 0)) return toast('Escribe un monto válido');
+      if (!categoriaSel) return toast('Elige una categoría');
+      const g = {
+        id: nuevoId(), monto: Math.round(monto * 100) / 100, descripcion: $('descripcion').value.trim(), categoria: categoriaSel,
+        fecha: $('fecha').value || hoyISO(), metodo: $('metodo').value, notas: $('notas').value.trim(), creado: new Date().toISOString()
+      };
+      $('btnGuardar').disabled = true;
+      try {
+        await cola.guardar(g);
+        pendientes = await cola.todos();
+      } finally { $('btnGuardar').disabled = false; }
+      $('monto').value = ''; $('descripcion').value = ''; $('notas').value = '';
+      pintar();
+      toast(navigator.onLine ? '✅ Gasto guardado' : '🕓 Guardado sin conexión. Se enviará después.');
+      sincronizar();
+    });
+
+    $('historial').addEventListener('click', async e => {
+      const b = e.target.closest('.borrar'); if (!b) return;
+      const r = vista[+b.dataset.i];
+      if (!confirm('¿Eliminar "' + (r.descripcion || r.categoria) + '" por ' + dinero(r.monto) + '?')) return;
+      if (r.pendiente) {
+        await cola.borrar([r.id]); pendientes = await cola.todos(); pintar(); toast('Eliminado'); return;
+      }
+      try {
+        const j = await api('eliminar', { id: r.id });
+        cache = j.datos; escribirLS(LS_CACHE, cache); conectado = true; pintar(); toast('Eliminado');
+      } catch (err) {
+        toast(err.servidor ? '⚠️ ' + err.message : 'Necesitas conexión para borrar un gasto ya sincronizado');
+      }
+    });
+
+    $('btnAjustes').addEventListener('click', () => mostrarAjustes($('ajustes').classList.contains('oculto')));
+    $('btnCerrarAjustes').addEventListener('click', () => mostrarAjustes(false));
+
+    $('btnProbar').addEventListener('click', async () => {
+      const url = $('cfgUrl').value.trim(), clave = $('cfgClave').value.trim();
+      const aviso = $('avisoAjustes');
+      if (!/^https:\/\/script\.google\.com\/.+\/exec$/.test(url)) {
+        aviso.textContent = 'La URL debe empezar con https://script.google.com/ y terminar en /exec';
+        aviso.classList.remove('oculto'); return;
+      }
+      if (!clave) { aviso.textContent = 'Escribe tu clave secreta'; aviso.classList.remove('oculto'); return; }
+      const anterior = config;
+      config = { url: url, clave: clave };
+      $('btnProbar').disabled = true; $('btnProbar').textContent = 'Probando…';
+      try {
+        const j = await api('datos');
+        escribirLS(LS_CONFIG, config);
+        cache = j.datos; escribirLS(LS_CACHE, cache); conectado = true; ultimaSync = new Date();
+        mostrarAjustes(false); pintar(); toast('✅ Conectado a tu hoja');
+        sincronizar();
+      } catch (e) {
+        config = anterior;
+        aviso.textContent = e.servidor ? e.message : 'No se pudo conectar. Revisa tu internet, la URL y que el acceso de la implementación sea "Cualquier usuario".';
+        aviso.classList.remove('oculto');
+      } finally { $('btnProbar').disabled = false; $('btnProbar').textContent = 'Guardar y probar'; }
+    });
+
+    window.addEventListener('online', sincronizar);
+    window.addEventListener('offline', pintarEstado);
+    document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') sincronizar(); });
+    setInterval(() => { if (pendientes.length && navigator.onLine) sincronizar(); }, 30000);
+
+    /* ---------- Inicio ---------- */
+    (async () => {
+      $('fecha').value = hoyISO();
+      pendientes = await cola.todos();
+      pintar();
+      if (!config) mostrarAjustes(true); else sincronizar();
+      if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
+      if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(() => {});
+    })();
+  </script>
+</body>
+</html>
