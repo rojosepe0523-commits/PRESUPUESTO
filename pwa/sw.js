@@ -1,6 +1,6 @@
 // Service worker: guarda la app en el teléfono para que abra sin conexión.
 // Al publicar cambios en index.html, sube el número de VERSION.
-const VERSION = 'presupuesto-v1';
+const VERSION = 'presupuesto-v3';
 const ARCHIVOS = [
   './',
   './index.html',
