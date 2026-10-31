@@ -164,7 +164,7 @@
         <button type="button" data-modo="ingreso">Ingreso</button>
       </div>
       <label>Monto</label>
-      <input id="monto" class="monto" type="text" inputmode="decimal" placeholder="0.00" autocomplete="off">
+      <input id="monto" class="monto" type="text" inputmode="decimal" placeholder="0" autocomplete="off">
       <label>Descripción</label>
       <input id="descripcion" type="text" placeholder="¿Qué compraste?" autocomplete="off">
 
@@ -208,19 +208,23 @@
   <script>
     'use strict';
     const CATS_DEFAULT = ['Comida', 'Supermercado', 'Transporte', 'Casa', 'Servicios', 'Salud', 'Entretenimiento', 'Ropa',
-      'Educación', 'Mascotas', 'Ahorro de emergencia', 'Otros'];
+      'Educación', 'Mascotas', 'Ahorro de emergencia', 'Deudas', 'Otros'];
     const AHORRO = 'Ahorro de emergencia';
-    const ESENCIALES = ['Casa', 'Servicios', 'Salud', 'Educación', 'Supermercado', 'Transporte', 'Mascotas'];
+    const ESENCIALES = ['Casa', 'Servicios', 'Salud', 'Educación', 'Supermercado', 'Transporte', 'Mascotas', 'Deudas'];
     const DISCRECIONALES = ['Comida', 'Entretenimiento', 'Ropa', 'Otros'];
     // Pagos fijos (una vez al mes): no se proyectan por día; se asume que se paga su presupuesto.
-    const FIJAS = ['Casa', 'Servicios', 'Educación', 'Ahorro de emergencia'];
+    const FIJAS = ['Casa', 'Servicios', 'Educación', 'Ahorro de emergencia', 'Deudas'];
     const COLORES_METODO = { 'Efectivo': 'var(--s1)', 'Débito': 'var(--s2)', 'Crédito': 'var(--s3)', 'Transferencia': 'var(--s4)' };
     const LS_CONFIG = 'presupuesto.config', LS_CACHE = 'presupuesto.cache', LS_COLA = 'presupuesto.cola';
     const DIA = 86400000;
 
     const $ = id => document.getElementById(id);
-    const dinero = n => (n < 0 ? '-$' : '$') + Math.abs(Number(n)).toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-    const dineroCorto = n => (n < 0 ? '-$' : '$') + Math.abs(Math.round(Number(n))).toLocaleString('es-MX');
+    // Pesos colombianos (COP): sin centavos y con punto de miles, p. ej. $1.250.000
+    const LOCALE = 'es-CO';
+    const dinero = n => (n < 0 ? '-$' : '$') + Math.abs(Math.round(Number(n))).toLocaleString(LOCALE, { maximumFractionDigits: 0 });
+    const dineroCorto = dinero;
+    // "11.000", "11000" o "1.250.000,00" → número entero de pesos
+    const leerMonto = t => Math.round(parseFloat(String(t).replace(/[\s$]/g, '').replace(/\./g, '').replace(',', '.')));
     const pct = p => Math.round(p * 100) + '%';
     const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
     const hoyISO = () => { const d = new Date(); d.setMinutes(d.getMinutes() - d.getTimezoneOffset()); return d.toISOString().slice(0, 10); };
@@ -231,8 +235,8 @@
     const inicioMes = s => s.slice(0, 7) + '-01';
     const inicioMesAnterior = s => { const d = isoADate(s); return dateAIso(new Date(d.getFullYear(), d.getMonth() - 1, 1)); };
     const diasDelMes = s => { const d = isoADate(s); return new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate(); };
-    const fechaCorta = s => isoADate(s).toLocaleDateString('es-MX', { day: 'numeric', month: 'short' });
-    const nombreMes = s => { const t = isoADate(s).toLocaleDateString('es-MX', { month: 'long', year: 'numeric' }); return t.charAt(0).toUpperCase() + t.slice(1); };
+    const fechaCorta = s => isoADate(s).toLocaleDateString(LOCALE, { day: 'numeric', month: 'short' });
+    const nombreMes = s => { const t = isoADate(s).toLocaleDateString(LOCALE, { month: 'long', year: 'numeric' }); return t.charAt(0).toUpperCase() + t.slice(1); };
     const clase = p => p > 1 ? 'excedido' : p > .8 ? 'alto' : '';
     const isoAFecha = s => { const p = String(s).split('-'); return p.length === 3 ? p[2] + '/' + p[1] + '/' + p[0] : s; };
     const nuevoId = () => (self.crypto && crypto.randomUUID) ? crypto.randomUUID()
@@ -522,7 +526,7 @@
       else if (conectado) { txt = '✓ Al día'; cls = 'ok'; }
       else { txt = '…'; cls = ''; }
       e.textContent = txt; e.className = 'estado ' + cls;
-      e.title = ultimaSync ? 'Última sincronización: ' + ultimaSync.toLocaleTimeString('es-MX') : '';
+      e.title = ultimaSync ? 'Última sincronización: ' + ultimaSync.toLocaleTimeString(LOCALE) : '';
     }
 
     function pintar() {
@@ -769,7 +773,7 @@
     });
 
     $('btnGuardar').addEventListener('click', async () => {
-      const monto = parseFloat($('monto').value.replace(/\s/g, '').replace(',', '.'));
+      const monto = leerMonto($('monto').value);
       if (!(monto > 0)) return toast('Escribe un monto válido');
       const fecha = $('fecha').value || hoyISO();
       let g;
@@ -780,11 +784,11 @@
             if (!confirm('Este salario iniciará un nuevo mes de presupuesto desde el ' + isoAFecha(fecha) + '. Los gastos anteriores quedarán en el periodo pasado. ¿Continuar?')) return;
           }
         }
-        g = { id: nuevoId(), clase: 'ingreso', monto: Math.round(monto * 100) / 100, descripcion: $('descripcion').value.trim(), tipo: tipoSel,
+        g = { id: nuevoId(), clase: 'ingreso', monto: monto, descripcion: $('descripcion').value.trim(), tipo: tipoSel,
           fecha: fecha, notas: $('notas').value.trim(), creado: new Date().toISOString() };
       } else {
         if (!categoriaSel) return toast('Elige una categoría');
-        g = { id: nuevoId(), clase: 'gasto', monto: Math.round(monto * 100) / 100, descripcion: $('descripcion').value.trim(), categoria: categoriaSel,
+        g = { id: nuevoId(), clase: 'gasto', monto: monto, descripcion: $('descripcion').value.trim(), categoria: categoriaSel,
           fecha: fecha, metodo: $('metodo').value, notas: $('notas').value.trim(), creado: new Date().toISOString() };
       }
       $('btnGuardar').disabled = true;
