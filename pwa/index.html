@@ -115,6 +115,18 @@
     table.datos { width:100%; border-collapse:collapse; font-size:13px; margin-top:8px; }
     table.datos th, table.datos td { text-align:right; padding:5px 4px; border-bottom:1px solid #eee; font-variant-numeric:tabular-nums; }
     table.datos th:first-child, table.datos td:first-child { text-align:left; }
+    .fila-tit { display:flex; justify-content:space-between; align-items:center; gap:8px; margin-bottom:6px; }
+    .fila-tit h2 { margin:0; }
+    .mini { border:none; background:var(--azul); color:#fff; border-radius:8px; padding:7px 10px; font-size:14px; white-space:nowrap; }
+    .mini.sec { background:#e3e8ef; color:var(--texto); }
+    .cat .top .ed { border:none; background:none; font-size:15px; padding:0 0 0 6px; }
+    .cat .tipo { font-size:11px; color:var(--suave); }
+    .boton.peligro { background:#fde7e7; color:var(--rojo); }
+    .rec h3 { font-size:15px; margin:12px 0 4px; }
+    .rec ul { margin:0; padding-left:20px; font-size:14px; line-height:1.45; color:#333; }
+    .rec p { font-size:14px; line-height:1.45; color:#333; margin:6px 0; }
+    .rec .fuente { font-size:12px; color:var(--suave); }
+    .rec .meta-ahorro { background:#e6f4ea; color:#0b5d0b; border-radius:10px; padding:10px 12px; font-size:14px; margin-top:10px; }
     details summary { font-size:13px; color:var(--azul); margin-top:10px; cursor:pointer; }
   </style>
 </head>
@@ -198,7 +210,32 @@
     </div>
 
     <div id="dashboard" class="oculto"></div>
-    <div id="categorias" class="card oculto"></div>
+    <div id="categorias" class="oculto">
+      <div class="card">
+        <div class="fila-tit"><h2>Tu catálogo de categorías</h2><button type="button" class="mini" id="btnNuevaCat">➕ Nueva</button></div>
+        <p class="ayuda" style="margin:0">Toca ✏️ para cambiar el nombre, el presupuesto o el tipo. Los cambios se guardan en tu hoja.</p>
+        <div id="listaCats"></div>
+      </div>
+      <div class="card oculto" id="editorCat">
+        <h2 id="editorTit">Nueva categoría</h2>
+        <label>Nombre</label>
+        <input id="catNombre" type="text" maxlength="40" autocomplete="off" placeholder="Ej: Gimnasio">
+        <label>Presupuesto mensual</label>
+        <input id="catPresupuesto" type="text" inputmode="decimal" placeholder="0" autocomplete="off">
+        <label>Tipo</label>
+        <select id="catTipo"></select>
+        <p class="ayuda">Los <b>pagos fijos</b> se pagan una vez al mes; los <b>opcionales</b> son los primeros que se sugiere recortar.</p>
+        <button type="button" class="boton" id="btnGuardarCat">Guardar categoría</button>
+        <button type="button" class="boton peligro oculto" id="btnBorrarCat">Eliminar categoría</button>
+        <button type="button" class="boton sec" id="btnCancelarCat">Cancelar</button>
+      </div>
+      <div class="card">
+        <h2>Métodos de pago</h2>
+        <label>Separados por coma</label>
+        <input id="metodosTxt" type="text" autocomplete="off">
+        <button type="button" class="boton sec" id="btnGuardarMetodos">Guardar métodos</button>
+      </div>
+    </div>
     <div id="historial" class="card oculto"></div>
   </div>
 
@@ -209,11 +246,13 @@
     'use strict';
     const CATS_DEFAULT = ['Comida', 'Supermercado', 'Transporte', 'Casa', 'Servicios', 'Salud', 'Entretenimiento', 'Ropa',
       'Educación', 'Mascotas', 'Ahorro de emergencia', 'Deudas', 'Otros'];
-    const AHORRO = 'Ahorro de emergencia';
-    const ESENCIALES = ['Casa', 'Servicios', 'Salud', 'Educación', 'Supermercado', 'Transporte', 'Mascotas', 'Deudas'];
-    const DISCRECIONALES = ['Comida', 'Entretenimiento', 'Ropa', 'Otros'];
-    // Pagos fijos (una vez al mes): no se proyectan por día; se asume que se paga su presupuesto.
-    const FIJAS = ['Casa', 'Servicios', 'Educación', 'Ahorro de emergencia', 'Deudas'];
+    // Tipo de cada categoría. Desde la versión 4 viene del catálogo de la hoja; esto es solo el respaldo.
+    // fija = pago mensual (no se proyecta por día) · esencial · opcional (se puede recortar) · ahorro
+    const TIPO_DEFECTO = { 'Casa': 'fija', 'Servicios': 'fija', 'Educación': 'fija', 'Deudas': 'fija', 'Ahorro de emergencia': 'ahorro',
+      'Supermercado': 'esencial', 'Transporte': 'esencial', 'Salud': 'esencial', 'Mascotas': 'esencial',
+      'Comida': 'opcional', 'Entretenimiento': 'opcional', 'Ropa': 'opcional', 'Otros': 'opcional' };
+    const TIPOS = { fija: 'Pago fijo mensual', esencial: 'Esencial', opcional: 'Opcional (recortable)', ahorro: 'Ahorro' };
+    const tipoDe = n => TIPO_DEFECTO[n] || 'opcional';
     const COLORES_METODO = { 'Efectivo': 'var(--s1)', 'Débito': 'var(--s2)', 'Crédito': 'var(--s3)', 'Transferencia': 'var(--s4)' };
     const LS_CONFIG = 'presupuesto.config', LS_CACHE = 'presupuesto.cache', LS_COLA = 'presupuesto.cola';
     const DIA = 86400000;
@@ -223,6 +262,8 @@
     const LOCALE = 'es-CO';
     const dinero = n => (n < 0 ? '-$' : '$') + Math.abs(Math.round(Number(n))).toLocaleString(LOCALE, { maximumFractionDigits: 0 });
     const dineroCorto = dinero;
+    // Etiquetas de ejes: $4,3 M · $520 mil (caben en el margen de la gráfica)
+    const dineroEje = n => n >= 1e6 ? '$' + (n / 1e6).toLocaleString(LOCALE, { maximumFractionDigits: 1 }) + ' M' : n >= 1e3 ? '$' + Math.round(n / 1e3) + ' mil' : dinero(n);
     // "11.000", "11000" o "1.250.000,00" → número entero de pesos
     const leerMonto = t => Math.round(parseFloat(String(t).replace(/[\s$]/g, '').replace(/\./g, '').replace(',', '.')));
     const pct = p => Math.round(p * 100) + '%';
@@ -255,6 +296,9 @@
     let conectado = null;     // null = sin intentar, true/false = resultado del último intento
     let ultimaSync = null;
     let vista = [];           // movimientos que se muestran en Historial
+    let catsVista = [];       // categorías que se muestran en el catálogo
+    let catEditando = null;   // nombre de la categoría que se edita (null = nueva)
+    let generandoRec = false;
 
     /* ---------- Cola de pendientes (IndexedDB, con respaldo en localStorage) ---------- */
     const cola = (() => {
@@ -289,10 +333,10 @@
     })();
 
     /* ---------- Comunicación con Apps Script ---------- */
-    async function api(accion, extra) {
+    async function api(accion, extra, espera) {
       if (!config) throw new Error('Falta configurar la conexión');
       const ctrl = new AbortController();
-      const t = setTimeout(() => ctrl.abort(), 25000);
+      const t = setTimeout(() => ctrl.abort(), espera || 25000);
       try {
         const r = await fetch(config.url, {
           method: 'POST',
@@ -307,7 +351,7 @@
           err.servidor = true; throw err;
         }
         if (!j.ok) { const err = new Error(j.error || 'Error del servidor'); err.servidor = true; throw err; }
-        if (j.datos && j.datos.version !== 3) {
+        if (j.datos && !(j.datos.version >= 3)) {
           const err = new Error('Tu Apps Script tiene la versión anterior. Pega el nuevo Code.gs, ejecuta "configurar" y publica una nueva versión.');
           err.servidor = true; throw err;
         }
@@ -353,10 +397,10 @@
 
     /* ---------- Cálculos (funcionan sin conexión: usan la copia guardada + pendientes) ---------- */
     function calcular() {
-      const c = cache && cache.version === 3 ? cache : null;
+      const c = cache && cache.version >= 3 ? cache : null;
       const hoy = hoyISO();
       const categorias = (c ? c.categorias : CATS_DEFAULT.map(n => ({ nombre: n, presupuesto: 0 })))
-        .map(x => ({ nombre: x.nombre, presupuesto: Number(x.presupuesto) || 0 }));
+        .map(x => ({ nombre: x.nombre, presupuesto: Number(x.presupuesto) || 0, tipo: TIPOS[x.tipo] ? x.tipo : tipoDe(x.nombre) }));
 
       const gastos = [], ingresos = [];
       if (c) {
@@ -386,16 +430,17 @@
       const porCat = {}, porCatAnt = {}, porMetodo = {};
       gPer.forEach(g => { porCat[g.categoria] = (porCat[g.categoria] || 0) + g.monto; porMetodo[g.metodo || 'Sin método'] = (porMetodo[g.metodo || 'Sin método'] || 0) + g.monto; });
       gAnt.forEach(g => { porCatAnt[g.categoria] = (porCatAnt[g.categoria] || 0) + g.monto; });
-      Object.keys(porCat).forEach(n => { if (!categorias.some(x => x.nombre === n)) categorias.push({ nombre: n, presupuesto: 0 }); });
+      Object.keys(porCat).forEach(n => { if (!categorias.some(x => x.nombre === n)) categorias.push({ nombre: n, presupuesto: 0, tipo: tipoDe(n), fueraCatalogo: true }); });
       categorias.forEach(x => { x.gastado = porCat[x.nombre] || 0; x.anterior = porCatAnt[x.nombre] || 0; });
 
       const totalGastos = gPer.reduce((s, g) => s + g.monto, 0);
       const totalIngresos = iPer.reduce((s, i) => s + i.monto, 0);
       const totalAnterior = gAnt.reduce((s, g) => s + g.monto, 0);
       const presupuestoTotal = categorias.reduce((s, x) => s + x.presupuesto, 0);
-      const aporteAhorro = porCat[AHORRO] || 0;
+      const aporteAhorro = categorias.reduce((s, x) => s + (x.tipo === 'ahorro' ? x.gastado : 0), 0);
       categorias.forEach(x => {
-        x.fija = FIJAS.indexOf(x.nombre) >= 0;
+        // Pagos fijos y ahorro (una vez al mes): no se proyectan por día; se asume que se paga su presupuesto.
+        x.fija = x.tipo === 'fija' || x.tipo === 'ahorro';
         x.proy = x.fija ? Math.max(x.gastado, x.presupuesto) : (transcurridos >= 3 ? x.gastado / transcurridos * largo : x.gastado);
       });
       const proyeccion = categorias.reduce((s, x) => s + x.proy, 0);
@@ -414,7 +459,8 @@
       return { hayDatos: !!c, hoy, inicio, porSalario, antInicio, hayAnterior, largo, transcurridos, restantes,
         categorias, porMetodo, gPer, iPer, totalGastos, totalIngresos, totalAnterior, presupuestoTotal, aporteAhorro,
         proyeccion, presupFijo, presupVar, gastoVar,
-        acumulado, movimientos, metodos: c ? c.metodos : null };
+        acumulado, movimientos, metodos: c ? c.metodos : null,
+        v4: !!c && c.version >= 4, cierres: c && c.cierres ? c.cierres : [], ia: !!(c && c.ia) };
     }
 
     /* ---------- Sugerencias para reducir gastos ---------- */
@@ -430,8 +476,8 @@
       }
 
       d.categorias.forEach(c => {
-        if (c.nombre === AHORRO || !c.presupuesto) return;
-        const esencial = ESENCIALES.indexOf(c.nombre) >= 0;
+        if (c.tipo === 'ahorro' || !c.presupuesto) return;
+        const esencial = c.tipo === 'esencial' || c.tipo === 'fija';
         if (c.gastado > c.presupuesto) {
           s.push({ cat: c.nombre, nivel: 'alto', ic: '🔴', tit: c.nombre + ' superó su presupuesto',
             txt: 'Vas ' + dinero(c.gastado - c.presupuesto) + ' por encima (' + pct(c.gastado / c.presupuesto) + ' usado). ' +
@@ -452,7 +498,7 @@
 
       if (d.hayAnterior) {
         d.categorias.forEach(c => {
-          if (c.nombre === AHORRO || c.anterior <= 0 || d.transcurridos < 7) return;
+          if (c.tipo === 'ahorro' || c.anterior <= 0 || d.transcurridos < 7) return;
           const p = c.fija ? c.gastado : c.proy;   // en pagos fijos solo cuenta lo ya pagado
           if (p > c.anterior * 1.25 && p - c.anterior > base * 0.02) {
             s.push({ cat: c.nombre, nivel: 'medio', ic: '📈', tit: c.nombre + ' subió frente al periodo anterior',
@@ -464,7 +510,7 @@
 
       // Compras pequeñas repetidas en categorías opcionales ("gastos hormiga").
       const umbral = Math.max(base * 0.015, 1);
-      DISCRECIONALES.forEach(n => {
+      d.categorias.filter(c => c.tipo === 'opcional').map(c => c.nombre).forEach(n => {
         const peq = d.gPer.filter(g => g.categoria === n && g.monto <= umbral);
         const suma = peq.reduce((a, g) => a + g.monto, 0);
         if (peq.length >= 5) {
@@ -475,7 +521,7 @@
       });
 
       // La categoría opcional con más peso: proponer bajarla 15 %.
-      const opc = d.categorias.filter(c => DISCRECIONALES.indexOf(c.nombre) >= 0 && c.gastado > 0).sort((a, b) => b.gastado - a.gastado)[0];
+      const opc = d.categorias.filter(c => c.tipo === 'opcional' && c.gastado > 0).sort((a, b) => b.gastado - a.gastado)[0];
       if (opc && d.totalGastos > 0 && opc.gastado / d.totalGastos >= 0.15) {
         s.push({ cat: opc.nombre, nivel: 'info', ic: '✂️', tit: 'Recorta ' + opc.nombre + ' un 15 %',
           txt: opc.nombre + ' es el ' + pct(opc.gastado / d.totalGastos) + ' de lo que gastas. Bajarla un 15 % libera unos ' + dinero(opc.proy * 0.15) + ' al cierre del periodo.',
@@ -489,12 +535,12 @@
           ahorro: 0 });
       }
 
-      const ahorroCat = d.categorias.find(c => c.nombre === AHORRO);
+      const ahorroCat = d.categorias.find(c => c.tipo === 'ahorro');
       const metaAhorro = ahorroCat && ahorroCat.presupuesto ? ahorroCat.presupuesto : d.totalIngresos * 0.1;
       if (metaAhorro > 0 && d.aporteAhorro < metaAhorro) {
         s.push({ nivel: 'info', ic: '🛟', tit: 'Completa tu ahorro de emergencia',
           txt: 'Llevas ' + dinero(d.aporteAhorro) + ' de ' + dinero(metaAhorro) + '. Aparta lo que falta (' + dinero(metaAhorro - d.aporteAhorro) +
-            ') apenas recibas el salario, regístralo en la categoría ' + AHORRO + '.', ahorro: 0 });
+            ') apenas recibas el salario' + (ahorroCat ? ', regístralo en la categoría ' + ahorroCat.nombre : '') + '.', ahorro: 0 });
       }
 
       if (!d.porSalario && d.hayDatos) {
@@ -560,11 +606,14 @@
       $('chips').innerHTML = d.categorias.map(c =>
         '<button type="button" class="chip' + (c.nombre === categoriaSel ? ' sel' : '') + '" data-cat="' + esc(c.nombre) + '">' + esc(c.nombre) + '</button>').join('');
 
-      $('categorias').innerHTML = d.categorias.map(c => {
+      catsVista = d.categorias;
+      $('listaCats').innerHTML = d.categorias.map((c, i) => {
         const pc = c.presupuesto ? c.gastado / c.presupuesto : 0;
-        return '<div class="cat"><div class="top"><span>' + esc(c.nombre) + '</span><span>' + dinero(c.gastado) + ' / ' + dinero(c.presupuesto) + '</span></div>' +
+        return '<div class="cat"><div class="top"><span>' + esc(c.nombre) + ' <span class="tipo">· ' + esc(c.fueraCatalogo ? 'fuera del catálogo' : TIPOS[c.tipo]) + '</span></span>' +
+               '<span>' + dinero(c.gastado) + ' / ' + dinero(c.presupuesto) + '<button type="button" class="ed" data-i="' + i + '" aria-label="Editar ' + esc(c.nombre) + '">✏️</button></span></div>' +
                '<div class="barra"><div class="' + clase(pc) + '" style="width:' + Math.min(pc * 100, 100) + '%"></div></div></div>';
       }).join('');
+      if (document.activeElement !== $('metodosTxt')) $('metodosTxt').value = (d.metodos || []).join(', ');
 
       vista = d.movimientos.slice(0, 40);
       $('historial').innerHTML = vista.length ? vista.map((r, i) => {
@@ -597,7 +646,7 @@
       [0, 0.5, 1].forEach(f => {
         const v = maxY / 1.08 * f;
         svg += '<line x1="' + iz + '" x2="' + (W - de) + '" y1="' + y(v) + '" y2="' + y(v) + '" stroke="var(--' + (f ? 'grid' : 'eje') + ')" stroke-width="1"/>' +
-               '<text x="' + (iz - 6) + '" y="' + (y(v) + 3) + '" text-anchor="end">' + dineroCorto(v) + '</text>';
+               '<text x="' + (iz - 6) + '" y="' + (y(v) + 3) + '" text-anchor="end">' + dineroEje(v) + '</text>';
       });
       svg += '<text x="' + iz + '" y="' + (H - 6) + '">Día 1</text><text x="' + (W - de) + '" y="' + (H - 6) + '" text-anchor="end">Día ' + d.largo + '</text>';
       // Ritmo ideal: los pagos fijos al inicio y el resto repartido por igual en los días del periodo.
@@ -650,6 +699,9 @@
         kpi('Puedes gastar por día', limite ? dinero(porDia) : '—', d.restantes + ' día' + (d.restantes === 1 ? '' : 's') + ' restante' + (d.restantes === 1 ? '' : 's')) +
         '</div>';
 
+      // Cierre de mes y recomendación con IA
+      h += tarjetaRecomendacion(d) + tarjetaEvolucion(d);
+
       // Sugerencias
       const sug = sugerencias(d);
       const totalAhorro = ahorroPosible(sug);
@@ -673,7 +725,7 @@
         cats.map(c => {
           const pc = c.presupuesto ? c.gastado / c.presupuesto : (c.gastado ? 1.01 : 0);
           let est, etiqueta;
-          if (c.nombre === AHORRO) { est = pc >= 1 ? 'ok' : 's1'; etiqueta = pc >= 1 ? '✓ meta cumplida' : 'aportado'; }
+          if (c.tipo === 'ahorro') { est = pc >= 1 ? 'ok' : 's1'; etiqueta = pc >= 1 ? '✓ meta cumplida' : 'aportado'; }
           else if (pc > 1) { est = 'critico'; etiqueta = '⚠ excedido'; }
           else if (c.fija) { est = c.gastado > 0 ? 'ok' : 's1'; etiqueta = c.gastado > 0 ? '✓ pago fijo' : '⏳ pago fijo pendiente'; }
           else if (pc > tiempo + 0.1) { est = 'adv'; etiqueta = '▲ rápido'; }
@@ -708,6 +760,72 @@
       }
 
       cont.innerHTML = h;
+    }
+
+    /* ---------- Evolución mensual y recomendación ---------- */
+    function tarjetaRecomendacion(d) {
+      let h = '<div class="card rec"><div class="fila-tit"><h2>🤖 Recomendación del mes</h2>';
+      if (!d.v4) {
+        return h + '</div><p>Actualiza el Apps Script de tu hoja a la versión 4 para recibir cada mes una recomendación con IA al registrar tu salario.</p></div>';
+      }
+      const c = d.cierres.slice().reverse().find(x => x.recomendacion);
+      const hayCierre = d.cierres.length > 0;
+      if (hayCierre) h += '<button type="button" class="mini sec" id="btnGenerarRec"' + (generandoRec ? ' disabled' : '') + '>' + (generandoRec ? 'Generando…' : (c ? '↻ Actualizar' : 'Generar')) + '</button>';
+      h += '</div>';
+      if (!c) {
+        return h + '<p>' + (hayCierre ? 'Tu mes anterior ya está cerrado; la recomendación se está generando. Toca "Generar" si no aparece en un minuto.'
+          : 'Cuando registres tu próximo salario se cerrará este mes y aquí verás tu recomendación para evolucionar financieramente.') + '</p></div>';
+      }
+      const r = c.recomendacion;
+      const lista = (tit, arr) => arr && arr.length ? '<h3>' + tit + '</h3><ul>' + arr.map(x => '<li>' + x + '</li>').join('') + '</ul>' : '';
+      h += '<p class="fuente">Mes del ' + fechaCorta(c.inicio) + ' al ' + fechaCorta(c.fin) + ' · ' +
+        (c.fuente === 'IA' ? 'generada con IA' : 'generada con reglas (agrega tu clave de IA para un análisis más completo)') + '</p>' +
+        '<h3 style="margin-top:6px">' + esc(r.titulo || 'Tu mes') + '</h3><p>' + esc(r.diagnostico || '') + '</p>' +
+        lista('✅ Lo que hiciste bien', (r.logros || []).map(esc)) +
+        lista('⚠️ Para vigilar', (r.alertas || []).map(esc)) +
+        lista('🎯 Acciones para este mes', (r.acciones || []).map(a => esc(a.accion) + (a.impacto_cop > 0 ? ' <b>(' + dinero(a.impacto_cop) + ')</b>' : ''))) +
+        lista('🧮 Ajustes de presupuesto sugeridos', (r.ajustes_presupuesto || []).map(a =>
+          '<b>' + esc(a.categoria) + '</b>: ' + dinero(a.actual) + ' → ' + dinero(a.sugerido) + '. ' + esc(a.motivo))) +
+        (r.meta_ahorro_cop > 0 ? '<div class="meta-ahorro">Meta de ahorro para este mes: <b>' + dinero(r.meta_ahorro_cop) + '</b></div>' : '') +
+        (r.mensaje ? '<p><b>Siguiente paso:</b> ' + esc(r.mensaje) + '</p>' : '');
+      return h + '</div>';
+    }
+
+    function tarjetaEvolucion(d) {
+      if (!d.v4) return '';
+      const filas = d.cierres.slice(-5).map(c => ({ inicio: c.inicio, ingresos: c.ingresos, gastos: c.gastos, tasa: c.tasaAhorro }))
+        .concat([{ inicio: d.inicio, ingresos: d.totalIngresos, gastos: d.totalGastos, actual: true,
+          tasa: d.totalIngresos > 0 ? (d.totalIngresos - d.totalGastos + d.aporteAhorro) / d.totalIngresos : 0 }]);
+      if (filas.length < 2) {
+        return '<div class="card"><h2>📈 Evolución mes a mes</h2><p class="ayuda" style="margin:0">Aquí verás cómo cambian tus ingresos, gastos y ahorro cada mes. ' +
+          'El primer cierre aparece cuando registres tu próximo salario.</p></div>';
+      }
+      const W = 320, H = 150, iz = 44, ab = 22, ar = 8;
+      const maxY = Math.max(1, ...filas.map(f => Math.max(f.ingresos, f.gastos))) * 1.08;
+      const ancho = (W - iz - 6) / filas.length, barra = Math.min(ancho * 0.34, 22);
+      const y = v => ar + (H - ar - ab) * (1 - v / maxY);
+      let svg = '<svg class="graf" viewBox="0 0 ' + W + ' ' + H + '" role="img" aria-label="Ingresos y gastos por mes">';
+      [0, 0.5, 1].forEach(f => {
+        const v = maxY / 1.08 * f;
+        svg += '<line x1="' + iz + '" x2="' + (W - 6) + '" y1="' + y(v) + '" y2="' + y(v) + '" stroke="var(--' + (f ? 'grid' : 'eje') + ')"/>' +
+          '<text x="' + (iz - 6) + '" y="' + (y(v) + 3) + '" text-anchor="end">' + dineroEje(v) + '</text>';
+      });
+      filas.forEach((f, i) => {
+        const cx = iz + ancho * i + ancho / 2;
+        const op = f.actual ? ' opacity="0.55"' : '';
+        svg += '<rect x="' + (cx - barra - 1) + '" y="' + y(f.ingresos) + '" width="' + barra + '" height="' + Math.max(y(0) - y(f.ingresos), 0) + '" rx="2" fill="var(--s3)"' + op +
+          ' data-tip="' + esc((f.actual ? 'Mes actual' : fechaCorta(f.inicio)) + ' · ingresos ' + dinero(f.ingresos)) + '"/>' +
+          '<rect x="' + (cx + 1) + '" y="' + y(f.gastos) + '" width="' + barra + '" height="' + Math.max(y(0) - y(f.gastos), 0) + '" rx="2" fill="var(--s2)"' + op +
+          ' data-tip="' + esc((f.actual ? 'Mes actual' : fechaCorta(f.inicio)) + ' · gastos ' + dinero(f.gastos)) + '"/>' +
+          '<text x="' + cx + '" y="' + (H - 6) + '" text-anchor="middle">' + (f.actual ? 'Actual' : esc(fechaCorta(f.inicio))) + '</text>';
+      });
+      svg += '</svg>';
+      return '<div class="card"><h2>📈 Evolución mes a mes</h2>' + svg +
+        '<div class="leyenda"><span><i class="pt" style="background:var(--s3)"></i>Ingresos</span><span><i class="pt" style="background:var(--s2)"></i>Gastos</span>' +
+        '<span>Mes actual en tono claro (en curso)</span></div>' +
+        '<table class="datos"><tr><th>Mes desde</th><th>Ingresos</th><th>Gastos</th><th>Ahorro</th></tr>' +
+        filas.slice().reverse().map(f => '<tr><td>' + (f.actual ? 'Actual' : esc(fechaCorta(f.inicio))) + '</td><td>' + dineroCorto(f.ingresos) + '</td><td>' +
+          dineroCorto(f.gastos) + '</td><td>' + pct(f.tasa) + '</td></tr>').join('') + '</table></div>';
     }
 
     /* ---------- Tooltip (toque o mouse) ---------- */
@@ -776,11 +894,12 @@
       const monto = leerMonto($('monto').value);
       if (!(monto > 0)) return toast('Escribe un monto válido');
       const fecha = $('fecha').value || hoyISO();
-      let g;
+      let g, nuevoCiclo = false;
       if (modo === 'ingreso') {
         if (tipoSel === 'Salario') {
           const d = calcular();
           if (fecha > d.inicio || !d.porSalario) {
+            nuevoCiclo = d.porSalario;
             if (!confirm('Este salario iniciará un nuevo mes de presupuesto desde el ' + isoAFecha(fecha) + '. Los gastos anteriores quedarán en el periodo pasado. ¿Continuar?')) return;
           }
         }
@@ -799,7 +918,12 @@
       $('monto').value = ''; $('descripcion').value = ''; $('notas').value = ''; $('fecha').value = hoyISO();
       pintar();
       const que = modo === 'ingreso' ? (tipoSel === 'Salario' ? 'Salario' : 'Ingreso') : 'Gasto';
-      toast(navigator.onLine ? '✅ ' + que + ' guardado' : '🕓 ' + que + ' guardado sin conexión. Se enviará después.');
+      if (nuevoCiclo) {
+        toast('💼 Nuevo mes iniciado en $0. Cerramos el anterior y en un par de minutos verás su recomendación en el Dashboard.');
+        setTimeout(sincronizar, 100000);
+      } else {
+        toast(navigator.onLine ? '✅ ' + que + ' guardado' : '🕓 ' + que + ' guardado sin conexión. Se enviará después.');
+      }
       sincronizar();
     });
 
@@ -816,6 +940,77 @@
       } catch (err) {
         toast(err.servidor ? '⚠️ ' + err.message : 'Necesitas conexión para borrar un registro ya sincronizado');
       }
+    });
+
+    /* ---------- Catálogo ---------- */
+    function abrirEditor(c) {
+      const d = calcular();
+      if (!d.v4) return toast('Para editar el catálogo actualiza el Apps Script de tu hoja a la versión 4');
+      catEditando = c && !c.fueraCatalogo ? c.nombre : null;
+      $('editorTit').textContent = catEditando ? 'Editar ' + c.nombre : 'Nueva categoría';
+      $('catNombre').value = c ? c.nombre : '';
+      $('catPresupuesto').value = c && c.presupuesto ? c.presupuesto.toLocaleString(LOCALE) : '';
+      $('catTipo').innerHTML = Object.keys(TIPOS).map(t => '<option value="' + t + '">' + TIPOS[t] + '</option>').join('');
+      $('catTipo').value = c ? c.tipo : 'opcional';
+      $('btnBorrarCat').classList.toggle('oculto', !catEditando);
+      $('editorCat').classList.remove('oculto');
+      $('editorCat').scrollIntoView({ behavior: 'smooth', block: 'start' });
+      $('catNombre').focus();
+    }
+    function cerrarEditor() { $('editorCat').classList.add('oculto'); catEditando = null; }
+
+    async function accionCatalogo(boton, accion, datos, ok) {
+      if (!navigator.onLine) return toast('Necesitas conexión para cambiar el catálogo');
+      boton.disabled = true;
+      try {
+        const j = await api(accion, datos);
+        guardarCache(j.datos); conectado = true; ultimaSync = new Date();
+        cerrarEditor(); pintar(); toast(ok);
+      } catch (e) {
+        toast('⚠️ ' + (e.servidor ? e.message : 'No se pudo guardar. Revisa tu conexión.'));
+      } finally { boton.disabled = false; }
+    }
+
+    $('listaCats').addEventListener('click', e => {
+      const b = e.target.closest('.ed'); if (b) abrirEditor(catsVista[+b.dataset.i]);
+    });
+    $('btnNuevaCat').addEventListener('click', () => abrirEditor(null));
+    $('btnCancelarCat').addEventListener('click', cerrarEditor);
+    $('btnGuardarCat').addEventListener('click', () => {
+      const nombre = $('catNombre').value.trim().replace(/\s+/g, ' ');
+      const presupuesto = $('catPresupuesto').value.trim() ? leerMonto($('catPresupuesto').value) : 0;
+      if (!nombre) return toast('Escribe el nombre de la categoría');
+      if (!(presupuesto >= 0)) return toast('Escribe un presupuesto válido');
+      const renombra = catEditando && catEditando !== nombre;
+      if (renombra && !confirm('Se cambiará "' + catEditando + '" por "' + nombre + '" también en los gastos ya registrados. ¿Continuar?')) return;
+      if (categoriaSel === catEditando) categoriaSel = nombre;
+      accionCatalogo($('btnGuardarCat'), 'categoria_guardar',
+        { nombre: nombre, nombreAnterior: catEditando || '', presupuesto: presupuesto, tipo: $('catTipo').value },
+        '✅ Categoría guardada');
+    });
+    $('btnBorrarCat').addEventListener('click', () => {
+      if (!catEditando) return;
+      if (!confirm('¿Eliminar la categoría "' + catEditando + '"? Los gastos ya registrados no se borran.')) return;
+      if (categoriaSel === catEditando) categoriaSel = '';
+      accionCatalogo($('btnBorrarCat'), 'categoria_eliminar', { nombre: catEditando }, 'Categoría eliminada');
+    });
+    $('btnGuardarMetodos').addEventListener('click', () => {
+      if (!calcular().v4) return toast('Para editar los métodos actualiza el Apps Script de tu hoja a la versión 4');
+      const metodos = $('metodosTxt').value.split(',').map(x => x.trim()).filter(Boolean);
+      if (!metodos.length) return toast('Escribe al menos un método de pago');
+      accionCatalogo($('btnGuardarMetodos'), 'metodos_guardar', { metodos: metodos }, '✅ Métodos guardados');
+    });
+
+    $('dashboard').addEventListener('click', async e => {
+      if (!e.target.closest('#btnGenerarRec') || generandoRec) return;
+      if (!navigator.onLine) return toast('Necesitas conexión para generar la recomendación');
+      generandoRec = true; pintar();
+      try {
+        const j = await api('recomendacion_generar', {}, 150000);
+        guardarCache(j.datos); conectado = true; toast('✅ Recomendación lista');
+      } catch (err) {
+        toast('⚠️ ' + (err.servidor ? err.message : 'No se pudo generar. Intenta de nuevo.'));
+      } finally { generandoRec = false; pintar(); }
     });
 
     $('btnAjustes').addEventListener('click', () => mostrarAjustes($('ajustes').classList.contains('oculto')));

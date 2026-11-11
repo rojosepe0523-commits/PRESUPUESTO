@@ -10,6 +10,9 @@
  *  4. Da formato de pesos sin centavos ($ 1.250.000) a montos, presupuestos y saldos.
  *  5. Rehace el gráfico de "Resumen" para que lea solo números.
  *
+ * IMPORTANTE (desde la versión 4): ya no lo ejecutes. Reescribe la lista de categorías con los valores de abajo
+ * y borraría las que crees o edites desde la app. Para configurar la hoja usa "configurar" de Code.gs.
+ *
  * Cómo usarlo: pega este archivo en Extensiones > Apps Script (como archivo nuevo),
  * elige la función "repararHoja" y pulsa Ejecutar. Se puede ejecutar las veces que quieras.
  */
